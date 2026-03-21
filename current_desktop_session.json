@@ -1,0 +1,44 @@
+{
+    "workspaces": {
+        "CurrentDesktop": {
+            "name": "CurrentDesktop",
+            "programs": [
+                {
+                    "path": "C:\\Users\\Ripple\\AppData\\Local\\WisprFlow\\app-1.4.604\\Wispr Flow.exe",
+                    "args": "",
+                    "cwd": "C:\\Users\\Ripple\\AppData\\Local\\WisprFlow\\app-1.4.604"
+                },
+                {
+                    "path": "C:\\Users\\Ripple\\AppData\\Local\\Programs\\Antigravity\\Antigravity.exe",
+                    "args": "",
+                    "cwd": "C:\\Users\\Ripple\\AppData\\Local\\Programs\\Antigravity"
+                },
+                {
+                    "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE",
+                    "args": "/n E:\\0 Master Resources\\Z Tips and Tricks\\Tips and Tricks - MultiTasking - Explorer, File Manager, File Search, Listary.docx",
+                    "cwd": "C:\\Users\\Ripple\\Documents"
+                },
+                {
+                    "path": "C:\\Program Files\\Microsoft Mathematics\\MathApp.exe",
+                    "args": "",
+                    "cwd": "C:\\Program Files\\Microsoft Mathematics"
+                },
+                {
+                    "path": "C:\\Users\\Ripple\\AppData\\Local\\PowerToys\\WinUI3Apps\\PowerToys.QuickAccess.exe",
+                    "args": "--show-event=Local\\PowerToysQuickAccess_22076_Show --exit-event=Local\\PowerToysQuickAccess_22076_Exit --runner-pipe=\\\\.\\pipe\\powertoys_quick_access_runner_9e208f7c-bc20-47b3-8fc4-7539fa9ac941 --app-pipe=\\\\.\\pipe\\powertoys_quick_access_ui_9e208f7c-bc20-47b3-8fc4-7539fa9ac941",
+                    "cwd": "C:\\Users\\Ripple\\AppData\\Local\\PowerToys\\WinUI3Apps"
+                },
+                {
+                    "path": "C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\CEF\\NVIDIA Overlay.exe",
+                    "args": "",
+                    "cwd": "C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\ShadowPlay"
+                }
+            ],
+            "files": [
+                {
+                    "path": "E:\\0 Master Resources\\Z Tips and Tricks\\Tips and Tricks - MultiTasking - Explorer, File Manager, File Search, Listary.docx"
+                }
+            ]
+        }
+    }
+}

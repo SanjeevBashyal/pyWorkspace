@@ -1,39 +1,40 @@
+from pyworkspace.windows import WindowsScanner
 from pyworkspace.Workspace import Workspace
 from pyworkspace.Session import Session
+from pyworkspace.sheets import save_session_to_sheets
 
 def main():
-    # 1. Initialize a session manager
-    # This will store the configuration in 'my_daily_session.json'
-    session = Session("my_daily_session.json")
-    
-    # 2. Create a new Workspace
-    dev_ws = Workspace("Development")
-    
-    # 3. Add programs to the workspace
-    # Replace these with actual paths on your system
-    # Example: dev_ws.add_program(r"C:\Program Files\Notepad++\notepad++.exe")
-    # Example with arguments: dev_ws.add_program(r"C:\Windows\System32\cmd.exe", "/k echo Hello Workspace!")
-    
-    # 4. Add files to the workspace (will open with default Windows application)
-    # Example: dev_ws.add_file(r"e:\0_Python\pyWorkspace\code.py")
-    
-    # 5. Add the workspace to the session
-    session.add_workspace(dev_ws)
-    
-    # 6. Save the session to disk
+    # 1. Automatically scan all currently open programs on the desktop
+    print("Scanning current desktop...")
+    apps = WindowsScanner.scan()
+    print(f"Found {len(apps)} programs.\n")
+
+    # 2. Build a Workspace from the live scan
+    ws = Workspace("CurrentDesktop")
+    for app in apps:
+        ws.add_program(path=app["path"], args=app["args"], cwd=app["cwd"])
+        for f in app["open_files"]:
+            ws.add_file(f)
+
+    # 3. Save as a local JSON session file
+    session = Session("current_desktop_session.json")
+    session.add_workspace(ws)
     session.save()
-    
-    # ---------------------------------------------------------
-    # To resume work later (e.g., after shutting down computer):
-    # ---------------------------------------------------------
-    
-    # 7. You can load and resume everything using:
-    # session_to_resume = Session("my_daily_session.json")
-    # session_to_resume.resume()
-    
-    # Or open a specific workspace:
-    # session_to_resume.load()
-    # session_to_resume.open_workspace("Development")
+
+    # 4. Also save to Google Sheets
+    save_session_to_sheets()
+
+    # 5. Print summary
+    for i, app in enumerate(apps, 1):
+        print(f"[{i}] {app['name']}")
+        print(f"    Path : {app['path']}")
+        print(f"    Args : {app['args'] or '(none)'}")
+        print(f"    CWD  : {app['cwd']}")
+        print(f"    Files: {app['open_files'] or '(none detected)'}")
+        print()
+
+    print("Workspace saved to current_desktop_session.json + Google Sheets")
+    print("To resume later: session.load() then session.open_workspace('CurrentDesktop')")
 
 if __name__ == "__main__":
     main()
