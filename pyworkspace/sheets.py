@@ -118,6 +118,21 @@ def save_session_to_sheets(workspace_name: str = "WorkspaceData"):
 # LOAD – read from Sheets and re-launch everything
 # ---------------------------------------------------------------------------
 
+def get_workspace_guid_from_sheets(workspace_name: str) -> str:
+    """Read the target desktop GUID from the Master sheet for a given workspace name."""
+    if not workbook or not workspace_name:
+        return ""
+    try:
+        master_sheet = workbook.worksheet("Master")
+        master_records = master_sheet.get_all_values()
+        for row in master_records:
+            if row and row[0] == workspace_name:
+                return row[1] if len(row) >= 2 else ""
+    except Exception as e:
+        print(f"Failed to fetch workspace GUID: {e}")
+    return ""
+
+
 def load_session_from_sheets(workspace_name: str = "WorkspaceData"):
     """
     Reads workspace data from Google Sheets and re-launches every program
@@ -162,38 +177,37 @@ def load_session_from_sheets(workspace_name: str = "WorkspaceData"):
                         extra_files.append(f)
 
         # Attempt to get the target desktop GUID from the Master sheet
-        try:
-            master_sheet = workbook.worksheet("Master")
-            master_records = master_sheet.get_all_values()
-            target_guid_str = ""
-            for row in master_records:
-                if row and row[0] == workspace_name:
-                    if len(row) >= 2:
-                        target_guid_str = row[1]
-                    break
-                    
-            if target_guid_str and target_guid_str != "Current Virtual Desktop":
-                print(f"Switching to and clearing target desktop GUID: {target_guid_str}")
-                from pyworkspace.windows import clear_desktop, switch_to_desktop_by_guid
-                switch_to_desktop_by_guid(target_guid_str)
+        target_guid_str = get_workspace_guid_from_sheets(workspace_name)
+        if target_guid_str and target_guid_str != "Current Virtual Desktop":
+            try:
+                from pyworkspace.windows import clear_desktop
+                print(f"Clearing target desktop GUID: {target_guid_str}")
                 clear_desktop(target_guid_str)
-        except Exception as e:
-            print(f"  [Warning] Could not clear and switch desktops context: {e}")
+            except Exception as e:
+                print(f"  [Warning] Could not clear target desktop context: {e}")
 
         session = Session(f"cloud_{workspace_name}_session.json")
         session.add_workspace(ws)
-        print(f"Launching programs from '{workspace_name}' workspace...")
-        session.open_workspace(workspace_name)
 
-        for fpath in extra_files:
-            if os.path.isfile(fpath):
-                try:
-                    print(f"  -> Opening file: {fpath}")
-                    os.startfile(fpath)
-                except Exception as e:
-                    print(f"  [Error] Could not open {fpath}: {e}")
-            else:
-                print(f"  [Warning] File not found: {fpath}")
+        def do_launch():
+            print(f"Launching programs from '{workspace_name}' workspace...")
+            session.open_workspace(workspace_name)
+    
+            for fpath in extra_files:
+                if os.path.isfile(fpath):
+                    try:
+                        print(f"  -> Opening file: {fpath}")
+                        os.startfile(fpath)
+                    except Exception as e:
+                        print(f"  [Error] Could not open {fpath}: {e}")
+                else:
+                    print(f"  [Warning] File not found: {fpath}")
+
+        if target_guid_str and target_guid_str != "Current Virtual Desktop":
+            from pyworkspace.windows import launch_and_move_to_desktop
+            launch_and_move_to_desktop(target_guid_str, do_launch)
+        else:
+            do_launch()
 
         print(f"Workspace '{workspace_name}' loaded successfully!")
         return True

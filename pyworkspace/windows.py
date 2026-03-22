@@ -117,6 +117,9 @@ def clear_desktop(target_guid_str: str):
     import uuid
     import psutil
     import win32process
+    import win32con
+    import time
+    
     try:
         target_guid = uuid.UUID(target_guid_str)
     except Exception:
@@ -126,6 +129,7 @@ def clear_desktop(target_guid_str: str):
     if not vdm: return
 
     to_kill_pids = set()
+    to_close_hwnds = []
 
     def callback(hwnd, _):
         if not win32gui.IsWindowVisible(hwnd):
@@ -142,6 +146,7 @@ def clear_desktop(target_guid_str: str):
                     # Same safety filters as scanning
                     if exe_name not in WindowsScanner._IGNORED_EXES:
                         if "windowsapps" not in exe_path and "systemapps" not in exe_path:
+                            to_close_hwnds.append(hwnd)
                             to_kill_pids.add(pid)
                 except Exception:
                     pass
@@ -150,65 +155,87 @@ def clear_desktop(target_guid_str: str):
 
     win32gui.EnumWindows(callback, None)
 
+    # Politely ask windows to close first
+    for hwnd in to_close_hwnds:
+        try:
+            win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
+        except Exception:
+            pass
+            
+    time.sleep(1.5) # Give apps time to close
+
+    # Forcefully terminate survivors
     for pid in to_kill_pids:
         try:
-            psutil.Process(pid).terminate()
+            if psutil.pid_exists(pid):
+                psutil.Process(pid).terminate()
         except Exception as e:
-            print(f"Could not kill PID {pid}: {e}")
+            print(f"Could not terminate PID {pid}: {e}")
 
 
-def switch_to_desktop_by_guid(target_guid_str: str):
+def launch_and_move_to_desktop(target_guid_str: str, launch_func):
     """
-    Calculates the registry index position of both the current and target desktops.
-    Emits Win+Ctrl+Left/Right strokes to seamlessly drop the user onto it.
+    Takes a snapshot of existing windows, executes launch_func(), then monitors
+    for new windows for 5 seconds and forcibly moves them to target_guid_str.
     """
     if not _HAS_VIRTUAL_DESKTOP:
+        launch_func()
         return
         
     import uuid
-    import winreg
-    import keyboard
     import time
+    from comtypes import GUID
     
     try:
-        target_guid = uuid.UUID(target_guid_str)
+        target_uuid = uuid.UUID(target_guid_str)
+        # Convert to COM GUID format for MoveWindowToDesktop
+        target_com_guid = COMGUID("{"+str(target_uuid)+"}")
     except Exception:
+        launch_func()
         return
-        
+
     vdm = _get_virtual_desktop_manager()
-    current_guid = _get_current_desktop_guid(vdm)
-    
-    if current_guid == target_guid:
-        return  # already there
+    if not vdm:
+        launch_func()
+        return
+
+    # Snapshot existing visible windows
+    existing_hwnds = set()
+    def snapshot_cb(hwnd, _):
+        if win32gui.IsWindowVisible(hwnd):
+            existing_hwnds.add(hwnd)
+    win32gui.EnumWindows(snapshot_cb, None)
+
+    # Launch the processes
+    launch_func()
+
+    # Watch for new windows for roughly 8 seconds to catch slow loaders
+    print("Monitoring for new windows to route to target desktop...")
+    for _ in range(16):
+        time.sleep(0.5)
+        current_hwnds = set()
         
-    try:
-        path = r"Software\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops"
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, path) as key:
-            all_ids, _ = winreg.QueryValueEx(key, "VirtualDesktopIDs")
-            
-        guids = []
-        for i in range(len(all_ids) // 16):
-            chunk = all_ids[i*16 : (i+1)*16]
-            guids.append(uuid.UUID(bytes_le=chunk))
-            
-        if current_guid in guids and target_guid in guids:
-            cur_idx = guids.index(current_guid)
-            tgt_idx = guids.index(target_guid)
-            
-            diff = tgt_idx - cur_idx
-            if diff > 0:
-                for _ in range(diff):
-                    keyboard.send("win+ctrl+right")
-                    time.sleep(0.1)
-            elif diff < 0:
-                for _ in range(abs(diff)):
-                    keyboard.send("win+ctrl+left")
-                    time.sleep(0.1)
-            
-            # Allow time for graphics to settle and desktop focus to be captured natively
-            time.sleep(0.5)
-    except Exception as e:
-        print(f"Desktop switch failed: {e}")
+        def check_cb(hwnd, _):
+            if win32gui.IsWindowVisible(hwnd):
+                current_hwnds.add(hwnd)
+                if hwnd not in existing_hwnds:
+                    try:
+                        existing_hwnds.add(hwnd) # mark as processed immediately
+                        # Ensure it's not already on the target desktop
+                        app_guid = uuid.UUID(str(vdm.GetWindowDesktopId(hwnd)))
+                        if app_guid != target_uuid:
+                            # Move it
+                            import pyvda
+                            pyvda.AppView(hwnd=hwnd).move(pyvda.VirtualDesktop(desktop_id=target_com_guid))
+                    except Exception:
+                        pass
+                    except BaseException:
+                        pass
+                        
+        try:
+            win32gui.EnumWindows(check_cb, None)
+        except Exception:
+            pass
 
 
 class WindowsScanner:
@@ -232,8 +259,9 @@ class WindowsScanner:
         "explorer.exe", "searchhost.exe", "shellexperiencehost.exe",
         "startmenuexperiencehost.exe", "textinputhost.exe",
         "applicationframehost.exe", "systemsettings.exe",
-        "runtimebroker.exe", "lockapp.exe", "securityhealthsystray.exe",
+        "runtimebroker.exe", "lockapp.exe", "securityhealthsystray.exe", "wispr flow.exe",
         "widgets.exe", "msteams.exe", "gamebar.exe", "powertoys.quickaccess.exe", "nvidia overlay.exe",
+        "python.exe"
     }
     # Extensions considered as user documents / project files
     # (used to filter psutil open_files results)

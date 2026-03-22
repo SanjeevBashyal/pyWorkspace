@@ -6,11 +6,12 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QObject
 
-from pyworkspace.sheets import (
-    save_session_to_sheets,
-    load_session_from_sheets,
-    list_workspaces_from_sheets,
-    delete_workspace_from_sheets
+from pyworkspace.storage import (
+    save_workspace,
+    load_workspace,
+    list_workspaces,
+    delete_workspace,
+    get_workspace_guid
 )
 
 
@@ -63,6 +64,8 @@ class AppWindow(QMainWindow):
         resume_layout.addWidget(self.resume_combo)
         
         resume_btn_layout = QHBoxLayout()
+        self.switch_btn = QPushButton("Switch Workspace")
+        self.switch_btn.clicked.connect(self.on_switch_clicked)
         self.resume_btn = QPushButton("Resume Selected")
         self.resume_btn.clicked.connect(self.on_resume_clicked)
         self.refresh_btn = QPushButton("Refresh List")
@@ -73,6 +76,7 @@ class AppWindow(QMainWindow):
         self.delete_btn.setStyleSheet("background-color: #c23616; color: white;")
         self.delete_btn.clicked.connect(self.on_delete_clicked)
         
+        resume_btn_layout.addWidget(self.switch_btn)
         resume_btn_layout.addWidget(self.resume_btn)
         resume_btn_layout.addWidget(self.refresh_btn)
         resume_btn_layout.addWidget(self.delete_btn)
@@ -112,6 +116,7 @@ class AppWindow(QMainWindow):
     def set_loading_state(self, message: str, is_loading: bool):
         self.status_label.setText(message)
         self.save_btn.setEnabled(not is_loading)
+        self.switch_btn.setEnabled(not is_loading)
         self.resume_btn.setEnabled(not is_loading)
         self.refresh_btn.setEnabled(not is_loading)
         self.delete_btn.setEnabled(not is_loading)
@@ -137,7 +142,7 @@ class AppWindow(QMainWindow):
         
         def fetch():
             try:
-                names = list_workspaces_from_sheets()
+                names = list_workspaces()
                 self.signals.result.emit(names)
             except Exception as e:
                 self.signals.error.emit(str(e))
@@ -208,10 +213,10 @@ class AppWindow(QMainWindow):
 
         def save():
             try:
-                success = save_session_to_sheets(name)
+                success = save_workspace(name)
                 if success:
                     # After a successful save, refresh the lists automatically so it appears!
-                    names = list_workspaces_from_sheets()
+                    names = list_workspaces()
                     self.signals.result.emit(names)
                     self.signals.finished.emit()
                 else:
@@ -220,6 +225,40 @@ class AppWindow(QMainWindow):
                 self.signals.error.emit(str(e))
 
         threading.Thread(target=save, daemon=True).start()
+
+    def switch_workspace_logic(self, name: str) -> bool:
+        try:
+            import pyvda
+            import uuid
+            guid_str = get_workspace_guid(name)
+            if guid_str and guid_str != "Current Virtual Desktop":
+                from comtypes import GUID
+                target_guid = GUID("{" + str(uuid.UUID(guid_str)) + "}")
+                # Move window and switch view
+                hwnd = int(self.winId())
+                pyvda.AppView(hwnd=hwnd).move(pyvda.VirtualDesktop(desktop_id=target_guid))
+                pyvda.VirtualDesktop(desktop_id=target_guid).go()
+                return True
+        except Exception as e:
+            print(f"Failed to switch workspace: {e}")
+        return False
+
+    def on_switch_clicked(self):
+        name = self.resume_combo.currentText()
+        if not name or name == "No workspaces found":
+            QMessageBox.warning(self, "Selection Error", "Please select a valid workspace to switch to.")
+            return
+
+        self.set_loading_state(f"Switching to workspace '{name}'...", True)
+
+        def switch():
+            try:
+                self.switch_workspace_logic(name)
+                self.signals.finished.emit()
+            except Exception as e:
+                self.signals.error.emit(str(e))
+
+        threading.Thread(target=switch, daemon=True).start()
 
     def on_resume_clicked(self):
         name = self.resume_combo.currentText()
@@ -231,7 +270,8 @@ class AppWindow(QMainWindow):
 
         def resume():
             try:
-                success = load_session_from_sheets(name)
+                self.switch_workspace_logic(name) # Call switch first
+                success = load_workspace(name)
                 if success:
                     self.signals.finished.emit()
                 else:
@@ -260,10 +300,10 @@ class AppWindow(QMainWindow):
 
         def delete():
             try:
-                success = delete_workspace_from_sheets(name)
+                success = delete_workspace(name)
                 if success:
                     # Refresh the lists automatically after successful deletion
-                    names = list_workspaces_from_sheets()
+                    names = list_workspaces()
                     self.signals.result.emit(names)
                     self.signals.finished.emit()
                 else:
@@ -289,8 +329,13 @@ class AppWindow(QMainWindow):
         QMessageBox.critical(self, "Error", error_msg)
 
 
-if __name__ == "__main__":
+def main():
+    import sys
+
     app = QApplication(sys.argv)
     window = AppWindow()
     window.show()
     sys.exit(app.exec())
+
+if __name__ == "__main__":
+    main()
