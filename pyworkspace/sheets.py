@@ -1,5 +1,6 @@
 # Google Sheets – Read / Write / Edit operations for Workspace data
 import os
+import sys
 import gspread
 from datetime import datetime
 from google.oauth2.service_account import Credentials
@@ -10,9 +11,23 @@ from pyworkspace.windows import WindowsScanner, get_current_desktop_guid_str
 # ---------------------------------------------------------------------------
 # Google Sheets client initialization
 # ---------------------------------------------------------------------------
+def _find_credentials():
+    """Resolve credentials from PyInstaller bundle or cwd."""
+    if getattr(sys, '_MEIPASS', None):
+        bundled = os.path.join(sys._MEIPASS, "master_credentials.json")
+        if os.path.exists(bundled):
+            return bundled
+    cwd_path = os.path.join(os.getcwd(), "master_credentials.json")
+    if os.path.exists(cwd_path):
+        return cwd_path
+    return None
+
 try:
+    _cred_path = _find_credentials()
+    if not _cred_path:
+        raise FileNotFoundError("master_credentials.json not found")
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-    creds = Credentials.from_service_account_file("master_credentials.json", scopes=scopes)
+    creds = Credentials.from_service_account_file(_cred_path, scopes=scopes)
     client = gspread.authorize(creds)
     sheet_id = "1Cu2YqjbAeQVNl5N_-bxE6l8_m_iyXOEyBkbf-pd6OKs"
     workbook = client.open_by_key(sheet_id)

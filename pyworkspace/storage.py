@@ -1,7 +1,20 @@
 import os
+import sys
 
-_CRED_FILE = os.path.join(os.getcwd(), "master_credentials.json")
-USE_CLOUD = os.path.exists(_CRED_FILE)
+def _find_credentials():
+    """Check for credentials in PyInstaller bundle first, then cwd."""
+    # PyInstaller bundles data files into sys._MEIPASS at runtime
+    if getattr(sys, '_MEIPASS', None):
+        bundled = os.path.join(sys._MEIPASS, "master_credentials.json")
+        if os.path.exists(bundled):
+            return bundled
+    cwd_path = os.path.join(os.getcwd(), "master_credentials.json")
+    if os.path.exists(cwd_path):
+        return cwd_path
+    return None
+
+CREDENTIALS_PATH = _find_credentials()
+USE_CLOUD = CREDENTIALS_PATH is not None
 
 if USE_CLOUD:
     print("Cloud credentials found. Using Google Sheets storage.")

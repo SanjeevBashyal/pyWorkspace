@@ -7,7 +7,7 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     name="pyworkspace",
-    version="1.0.0",
+    version="1.0.1",
     description="A Python-based Windows Virtual Desktop workspace manager.",
     author="Ripple",
     packages=find_packages(),
